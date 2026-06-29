@@ -25,7 +25,7 @@ class Coin
         $this->name        = $name;
         $this->symbol      = strtoupper($symbol);
         $this->description = $description;
-        $this->createdAt   = $createdAt;
+        $this->createdAt    = $createdAt;
     }
 
     // --- Getters ---

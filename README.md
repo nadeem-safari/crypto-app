@@ -58,8 +58,7 @@ private string $password = '';          // jouw MySQL wachtwoord
 
 ### 3. Opstarten
 Zet de map in je webserver (bijv. XAMPP `htdocs/crypto-app/`)
-en open: `http://localhost/crypto-app/public/index.php`
-
+en open: ``http://localhost/crypto-app/public/index.php
 ---
 
 ## 🏗️ OOP-structuur uitgelegd
@@ -84,7 +83,7 @@ en open: `http://localhost/crypto-app/public/index.php`
 - [x] **Zoeken** — filteren op naam of symbool
 - [x] **Validatie** — server-side controles + foutmeldingen
 - [x] **Feedback** — groene/rode meldingen na elke actie
-- [ ] **API integratie** — gepland voor Blok 2 (CoinGecko)
+- [x] **API integratie** — live koers via CoinGecko in tabel + auto-refresh
 
 ---
 
@@ -92,5 +91,11 @@ en open: `http://localhost/crypto-app/public/index.php`
 
 We voegen toe:
 - `services/ApiService.php` → CoinGecko API aanroepen
-- Live koersen ophalen en koppelen aan coins in de database
+- `public/api/prices.php` → JSON endpoint voor live koersen
+- Live koersen worden elke 30 seconden ververst in de tabel
 - Gratis endpoint: `https://api.coingecko.com/api/v3/simple/price`
+
+### Hoe het werkt
+
+De pagina laadt de coins uit de database en vraagt daarna live prijzen op via CoinGecko.
+De frontend ververst de koerskolom automatisch met JavaScript, zodat je geen volledige pagina-refresh nodig hebt.

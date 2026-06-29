@@ -1,53 +1,72 @@
 <?php
 
-// =============================================
-// Autoload alle klassen
-// =============================================
+// Laad de klassen die deze pagina nodig heeft.
 require_once __DIR__ . '/../config/Database.php';
 require_once __DIR__ . '/../models/Coin.php';
 require_once __DIR__ . '/../repositories/CoinRepository.php';
 require_once __DIR__ . '/../services/CoinService.php';
+require_once __DIR__ . '/../services/ApiService.php';
 
-$service = new CoinService();
+$apiService = new ApiService();
+$service = null;
+$bootstrapError = null;
 
-// =============================================
-// Controller: verwerk POST-acties
-// =============================================
+try {
+    $service = new CoinService();
+} catch (Throwable $exception) {
+    $bootstrapError = $exception->getMessage();
+}
+
+// Hier bewaren we de melding die na een actie op het scherm komt.
 $feedback = null;  // ['type' => 'success'|'error', 'message' => '...']
 
+// Bepaal eerst welke actie de gebruiker wil uitvoeren.
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $id     = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 
-switch ($action) {
-    case 'create':
-        $result   = $service->createCoin(
-            $_POST['name']        ?? '',
-            $_POST['symbol']      ?? '',
-            $_POST['description'] ?? ''
-        );
-        $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
-        break;
+if ($service !== null) {
+    // Verwerk alleen acties als de database-laag goed is opgestart.
+    switch ($action) {
+        case 'create':
+            $result   = $service->createCoin(
+                $_POST['name']        ?? '',
+                $_POST['symbol']      ?? '',
+                $_POST['description'] ?? ''
+            );
+            $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
+            break;
 
-    case 'update':
-        $result   = $service->updateCoin(
-            (int) ($_POST['id'] ?? 0),
-            $_POST['name']        ?? '',
-            $_POST['symbol']      ?? '',
-            $_POST['description'] ?? ''
-        );
-        $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
-        break;
+        case 'update':
+            $result   = $service->updateCoin(
+                (int) ($_POST['id'] ?? 0),
+                $_POST['name']        ?? '',
+                $_POST['symbol']      ?? '',
+                $_POST['description'] ?? ''
+            );
+            $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
+            break;
 
-    case 'delete':
-        $result   = $service->deleteCoin($id);
-        $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
-        break;
+        case 'delete':
+            $result   = $service->deleteCoin($id);
+            $feedback = ['type' => $result['success'] ? 'success' : 'error', 'message' => $result['message']];
+            break;
+    }
 }
 
-// Data ophalen voor de weergave
+// Haal de coins op voor de tabel en de edit-pagina.
 $searchQuery = $_GET['search'] ?? '';
-$coins       = $searchQuery ? $service->searchCoins($searchQuery) : $service->getAllCoins();
-$editCoin    = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
+$coins       = [];
+$editCoin    = null;
+$livePrices  = [];
+
+if ($service !== null) {
+    // Eerst de coins uit de database, daarna de live prijs erbij zetten.
+    $coins      = $searchQuery ? $service->searchCoins($searchQuery) : $service->getAllCoins();
+    $editCoin   = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
+    $livePrices = $apiService->getPricesForCoins($coins, 'eur');
+} else {
+    $feedback = ['type' => 'error', 'message' => 'Databaseverbinding niet beschikbaar. Start MySQL/MariaDB in XAMPP en controleer of database "cryptoapp" bestaat.'];
+}
 
 ?>
 <!DOCTYPE html>
@@ -74,6 +93,12 @@ $editCoin    = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
         </div>
     <?php endif; ?>
 
+    <?php if ($bootstrapError): ?>
+        <div class="alert alert-error">
+            <?= htmlspecialchars($bootstrapError) ?>
+        </div>
+    <?php endif; ?>
+
     <!-- Stats -->
     <div class="stats">
         <div class="stat">
@@ -82,7 +107,7 @@ $editCoin    = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
         </div>
         <div class="stat">
             <div class="stat-label">Database</div>
-            <div class="stat-value" style="font-size:1rem; padding-top:0.4rem; color:var(--green);">● Online</div>
+            <div class="stat-value" style="font-size:1rem; padding-top:0.4rem; color:<?= $bootstrapError ? 'var(--red)' : 'var(--green)' ?>;">● <?= $bootstrapError ? 'Offline' : 'Online' ?></div>
         </div>
     </div>
 
@@ -167,18 +192,42 @@ $editCoin    = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
                                     <th>#</th>
                                     <th>Naam</th>
                                     <th>Symbool</th>
+                                    <th>Live koers</th>
                                     <th>Beschrijving</th>
                                     <th>Acties</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($coins as $coin): ?>
-                                    <tr>
+                                    <?php // Voor elke coin pakken we de live prijs die bij het database-item hoort. ?>
+                                    <?php $priceInfo = $livePrices[$coin->getId()] ?? ['price' => null, 'change24h' => null, 'updatedAt' => null, 'currency' => 'EUR']; ?>
+                                    <tr data-coin-row data-coin-id="<?= $coin->getId() ?>">
                                         <td style="color:var(--muted); font-family:'Space Mono',monospace; font-size:0.75rem;">
                                             <?= $coin->getId() ?>
                                         </td>
                                         <td style="font-weight:600;"><?= htmlspecialchars($coin->getName()) ?></td>
                                         <td><span class="symbol-badge"><?= htmlspecialchars($coin->getSymbol()) ?></span></td>
+                                        <td>
+                                            <div class="live-price" data-live-price>
+                                                <?= isset($priceInfo['price']) && $priceInfo['price'] !== null ? '€ ' . number_format((float) $priceInfo['price'], $priceInfo['price'] < 1 ? 6 : 2, ',', '.') : 'n.v.t.' ?>
+                                            </div>
+                                            <div class="live-meta">
+                                                <span class="live-change <?= isset($priceInfo['change24h']) && $priceInfo['change24h'] !== null && (float) $priceInfo['change24h'] >= 0 ? 'is-positive' : 'is-negative' ?>" data-live-change>
+                                                    <?php if (isset($priceInfo['change24h']) && $priceInfo['change24h'] !== null): ?>
+                                                        <?= ((float) $priceInfo['change24h'] >= 0 ? '+' : '') . number_format((float) $priceInfo['change24h'], 2, ',', '.') ?>%
+                                                    <?php else: ?>
+                                                        n.v.t.
+                                                    <?php endif; ?>
+                                                </span>
+                                                <span class="live-updated" data-live-updated>
+                                                    <?php if (!empty($priceInfo['updatedAt'])): ?>
+                                                        <?= date('H:i:s', (int) $priceInfo['updatedAt']) ?>
+                                                    <?php else: ?>
+                                                        --:--:--
+                                                    <?php endif; ?>
+                                                </span>
+                                            </div>
+                                        </td>
                                         <td class="description-cell"><?= htmlspecialchars($coin->getDescription()) ?></td>
                                         <td>
                                             <div class="actions">
@@ -200,6 +249,83 @@ $editCoin    = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
 
     </div><!-- /.grid -->
 </div><!-- /.container -->
+
+<script>
+(function () {
+    // Deze route wordt gebruikt voor de live prijzen in de tabel.
+    const apiUrl = 'api/prices.php';
+    // De tabel ververst automatisch zonder de pagina opnieuw te laden.
+    const refreshIntervalMs = 30000;
+
+    function formatPrice(value) {
+        const digits = value < 1 ? 6 : 2;
+        return new Intl.NumberFormat('nl-NL', {
+            style: 'currency',
+            currency: 'EUR',
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits,
+        }).format(value);
+    }
+
+    function formatChange(value) {
+        const sign = value >= 0 ? '+' : '';
+        return `${sign}${value.toFixed(2)}%`;
+    }
+
+    function formatTime(timestamp) {
+        return new Intl.DateTimeFormat('nl-NL', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        }).format(new Date(timestamp * 1000));
+    }
+
+    async function refreshPrices() {
+        try {
+            // Vraag verse prijzen op en werk alleen de velden bij die live zijn.
+            const response = await fetch(apiUrl, { cache: 'no-store' });
+            const data = await response.json();
+
+            if (!data.success || !data.prices) {
+                return;
+            }
+
+            document.querySelectorAll('[data-coin-row]').forEach((row) => {
+                const coinId = row.getAttribute('data-coin-id');
+                const priceInfo = data.prices[coinId];
+
+                if (!priceInfo) {
+                    return;
+                }
+
+                const priceElement = row.querySelector('[data-live-price]');
+                const changeElement = row.querySelector('[data-live-change]');
+                const updatedElement = row.querySelector('[data-live-updated]');
+
+                if (priceElement) {
+                    priceElement.textContent = priceInfo.price !== null ? formatPrice(Number(priceInfo.price)) : 'n.v.t.';
+                }
+
+                if (changeElement) {
+                    const change = priceInfo.change24h !== null ? Number(priceInfo.change24h) : null;
+                    changeElement.textContent = change !== null ? formatChange(change) : 'n.v.t.';
+                    changeElement.classList.toggle('is-positive', change !== null && change >= 0);
+                    changeElement.classList.toggle('is-negative', change !== null && change < 0);
+                }
+
+                if (updatedElement) {
+                    updatedElement.textContent = priceInfo.updatedAt ? formatTime(Number(priceInfo.updatedAt)) : '--:--:--';
+                }
+            });
+        } catch (error) {
+            console.error('Live koers kon niet worden ververst', error);
+        }
+    }
+
+    refreshPrices();
+    window.setInterval(refreshPrices, refreshIntervalMs);
+})();
+</script>
 
 </body>
 </html>

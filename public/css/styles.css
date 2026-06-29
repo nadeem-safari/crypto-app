@@ -228,6 +228,30 @@ td { padding: 0.8rem 0.75rem; vertical-align: middle; }
     font-size: 0.85rem;
 }
 
+.live-price {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.live-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+}
+
+.live-change.is-positive { color: var(--green); }
+.live-change.is-negative { color: var(--red); }
+
+.live-updated {
+    opacity: 0.85;
+}
+
 .actions { display: flex; gap: 0.5rem; }
 
 .empty-state {
