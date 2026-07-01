@@ -27,6 +27,13 @@ $id     = isset($_GET['id']) ? (int) $_GET['id'] : 0;
 if ($service !== null) {
     // Verwerk alleen acties als de database-laag goed is opgestart.
     switch ($action) {
+        case 'sync_prices':
+            $coinsToSync = $service->getAllCoins();
+            $apiPrices = $apiService->getPricesForCoins($coinsToSync, 'eur');
+            $updatedCount = $service->syncLivePrices($apiPrices);
+            $feedback = ['type' => 'success', 'message' => "API-data opgeslagen voor {$updatedCount} coins."];
+            break;
+
         case 'create':
             $result   = $service->createCoin(
                 $_POST['name']        ?? '',
@@ -58,12 +65,14 @@ $searchQuery = $_GET['search'] ?? '';
 $coins       = [];
 $editCoin    = null;
 $livePrices  = [];
+$portfolioOverview = [];
 
 if ($service !== null) {
     // Eerst de coins uit de database, daarna de live prijs erbij zetten.
     $coins      = $searchQuery ? $service->searchCoins($searchQuery) : $service->getAllCoins();
     $editCoin   = ($action === 'edit' && $id) ? $service->getCoinById($id) : null;
     $livePrices = $apiService->getPricesForCoins($coins, 'eur');
+    $portfolioOverview = $service->getPortfolioOverview();
 } else {
     $feedback = ['type' => 'error', 'message' => 'Databaseverbinding niet beschikbaar. Start MySQL/MariaDB in XAMPP en controleer of database "cryptoapp" bestaat.'];
 }
@@ -82,10 +91,11 @@ if ($service !== null) {
 <body>
 
 <header>
-    <div class="logo">crypto<span>APP</span></div>
-</header>
-
 <div class="container">
+
+
+
+iv class="container">
 
     <?php if ($feedback): ?>
         <div class="alert alert-<?= $feedback['type'] ?>">
@@ -109,6 +119,17 @@ if ($service !== null) {
             <div class="stat-label">Database</div>
             <div class="stat-value" style="font-size:1rem; padding-top:0.4rem; color:<?= $bootstrapError ? 'var(--red)' : 'var(--green)' ?>;">● <?= $bootstrapError ? 'Offline' : 'Online' ?></div>
         </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:1.5rem;">
+        <div class="panel-title">API-data opslaan</div>
+        <p style="margin:0 0 1rem 0; color:var(--muted);">
+            Haal de nieuwste prijzen op uit CoinGecko en zet ze in de coin-tabel.
+        </p>
+        <form method="POST" action="index.php">
+            <input type="hidden" name="action" value="sync_prices">
+            <button type="submit" class="btn btn-primary">Live prijzen opslaan</button>
+        </form>
     </div>
 
     <div class="grid">
@@ -199,8 +220,12 @@ if ($service !== null) {
                             </thead>
                             <tbody>
                                 <?php foreach ($coins as $coin): ?>
-                                    <?php // Voor elke coin pakken we de live prijs die bij het database-item hoort. ?>
-                                    <?php $priceInfo = $livePrices[$coin->getId()] ?? ['price' => null, 'change24h' => null, 'updatedAt' => null, 'currency' => 'EUR']; ?>
+                                    <?php $priceInfo = [
+                                        'price' => $coin->getLivePrice(),
+                                        'change24h' => $coin->getLiveChange24h(),
+                                        'updatedAt' => $coin->getLiveUpdatedAt(),
+                                        'currency' => $coin->getLiveCurrency(),
+                                    ]; ?>
                                     <tr data-coin-row data-coin-id="<?= $coin->getId() ?>">
                                         <td style="color:var(--muted); font-family:'Space Mono',monospace; font-size:0.75rem;">
                                             <?= $coin->getId() ?>
@@ -248,6 +273,47 @@ if ($service !== null) {
         </div>
 
     </div><!-- /.grid -->
+
+    <div class="panel" style="margin-top:1.5rem;">
+        <div class="panel-title">Portfolio overzicht</div>
+        <p style="margin:0 0 1rem 0; color:var(--muted);">
+            Hier zie je coins gekoppeld aan portfolios uit de andere tabel.
+        </p>
+
+        <div class="table-wrap">
+            <?php if (empty($portfolioOverview)): ?>
+                <div class="empty-state">
+                    <div class="icon">◌</div>
+                    <p>Geen portfolio-koppelingen gevonden.</p>
+                </div>
+            <?php else: ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Portfolio</th>
+                            <th>Coin</th>
+                            <th>Aantal</th>
+                            <th>Aankoopprijs</th>
+                            <th>Live koers</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($portfolioOverview as $item): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($item['portfolio_name']) ?></td>
+                                <td><?= htmlspecialchars($item['coin_name']) ?> (<?= htmlspecialchars($item['symbol']) ?>)</td>
+                                <td><?= number_format((float) $item['amount'], 8, ',', '.') ?></td>
+                                <td>€ <?= number_format((float) $item['buy_price'], 2, ',', '.') ?></td>
+                                <td>
+                                    <?= isset($item['live_price']) && $item['live_price'] !== null ? '€ ' . number_format((float) $item['live_price'], ((float) $item['live_price'] < 1 ? 6 : 2), ',', '.') : 'n.v.t.' ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+    </div>
 </div><!-- /.container -->
 
 <script>

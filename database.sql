@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS coins (
     name        VARCHAR(100)   NOT NULL,
     symbol      VARCHAR(10)    NOT NULL UNIQUE,
     description TEXT,
-    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP      DEFAULT CURRENT_TIMESTAMP,
+    live_price  DECIMAL(18, 8) NULL,
+    live_currency VARCHAR(10)  NULL,
+    live_change_24h DECIMAL(18, 8) NULL,
+    live_updated_at INT NULL
 );
 
 -- Tabel 2: portfolios

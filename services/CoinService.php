@@ -116,6 +116,44 @@ class CoinService
     }
 
     // -------------------------------------------------------
+    // API DATA OPSLAAN
+    // -------------------------------------------------------
+
+    /**
+     * Sla live API-data op in de coins tabel.
+     */
+    public function syncLivePrices(array $pricesBySymbol): int
+    {
+        $updated = 0;
+
+        foreach ($pricesBySymbol as $symbol => $priceInfo) {
+            if (!is_array($priceInfo)) {
+                continue;
+            }
+
+            if ($this->repository->syncLiveData(
+                (string) $symbol,
+                isset($priceInfo['price']) ? (float) $priceInfo['price'] : null,
+                (string) ($priceInfo['currency'] ?? 'EUR'),
+                isset($priceInfo['change24h']) ? (float) $priceInfo['change24h'] : null,
+                isset($priceInfo['updatedAt']) ? (int) $priceInfo['updatedAt'] : null
+            )) {
+                $updated++;
+            }
+        }
+
+        return $updated;
+    }
+
+    /**
+     * Laat de koppeling tussen coins en portfolios zien.
+     */
+    public function getPortfolioOverview(): array
+    {
+        return $this->repository->getPortfolioOverview();
+    }
+
+    // -------------------------------------------------------
     // VALIDATIE (privé hulpfunctie)
     // -------------------------------------------------------
 
